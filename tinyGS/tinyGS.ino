@@ -178,11 +178,11 @@ void setup()
 
 unsigned long lastTleRefresh = 0;
 
-void loop() {
+void handleGPS() {
   static unsigned long gpsMap = 0;
   static unsigned long gpsSec = 0;
   char buff[4][64];  // Buffers for the log messages
-  
+
   // Feed the GPS parser
   while (GPS_Serial.available()) {
       gps.encode(GPS_Serial.read());
@@ -209,22 +209,26 @@ void loop() {
   } else {
       // We have a valid location fix
       if (millis() - gpsMap > 10000) {
-        int localHour = gps.time.hour() + timeZoneOffset;
-        if (localHour >= 24) localHour -= 24;
-  
-        snprintf(buff[0], sizeof(buff[0]), "Local Time: %02d:%02d:%02d", localHour, gps.time.minute(), gps.time.second());
-        snprintf(buff[1], sizeof(buff[1]), "LNG:%.4f", gps.location.lng());
-        snprintf(buff[2], sizeof(buff[2]), "LAT:%.4f", gps.location.lat());
-        snprintf(buff[3], sizeof(buff[3]), "satellites:%u", gps.satellites.value());
-  
-        Log::console(PSTR("%s"), buff[0]);
-        Log::console(PSTR("%s"), buff[1]);
-        Log::console(PSTR("%s"), buff[2]);
-        Log::console(PSTR("%s"), buff[3]);
-  
-        gpsMap = millis();
-    }
+          int localHour = gps.time.hour() + timeZoneOffset;
+          if (localHour >= 24) localHour -= 24;
+
+          snprintf(buff[0], sizeof(buff[0]), "Local Time: %02d:%02d:%02d", localHour, gps.time.minute(), gps.time.second());
+          snprintf(buff[1], sizeof(buff[1]), "LNG:%.4f", gps.location.lng());
+          snprintf(buff[2], sizeof(buff[2]), "LAT:%.4f", gps.location.lat());
+          snprintf(buff[3], sizeof(buff[3]), "satellites:%u", gps.satellites.value());
+
+          Log::console(PSTR("%s"), buff[0]);
+          Log::console(PSTR("%s"), buff[1]);
+          Log::console(PSTR("%s"), buff[2]);
+          Log::console(PSTR("%s"), buff[3]);
+
+          gpsMap = millis();
+      }
   }
+}
+
+void loop() {
+  handleGPS(); //Get our coordinates.
   configManager.doLoop();
   if (configManager.isFailSafeActive())
   {
