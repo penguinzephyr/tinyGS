@@ -79,6 +79,14 @@
 #include "src/Logger/Logger.h"
 #include "time.h"
 
+//GPS STUFF START
+#include <TinyGPS++.h>
+TinyGPSPlus gps;
+HardwareSerial GPS_Serial(1);
+
+const int timeZoneOffset = 10;
+//GPS STUFF END
+
 
 #if  RADIOLIB_VERSION_MAJOR != (0x07) || RADIOLIB_VERSION_MINOR != (0x01) || RADIOLIB_VERSION_PATCH != (0x02) || RADIOLIB_VERSION_EXTRA != (0x00)
 #error "You are not using the correct version of RadioLib please copy TinyGS/lib/RadioLib on Arduino/libraries"
@@ -129,7 +137,8 @@ void wifiConnected()
 }
 
 void setup()
-{ 
+{
+  GPS_Serial.begin(9600, SERIAL_8N1, 34, 12);  // TX=34, RX=12
 #if CONFIG_IDF_TARGET_ESP32C3
   setCpuFrequencyMhz(160);
 #else
@@ -169,7 +178,53 @@ void setup()
 
 unsigned long lastTleRefresh = 0;
 
-void loop() {  
+void loop() {
+  static unsigned long gpsMap = 0;
+  static unsigned long gpsSec = 0;
+  char buff[4][64];  // Buffers for the log messages
+  
+  // Feed the GPS parser
+  while (GPS_Serial.available()) {
+      gps.encode(GPS_Serial.read());
+  }
+  
+  // If after 5s no GPS data seen
+  if (millis() > 5000 && gps.charsProcessed() < 10) {
+      snprintf(buff[0], sizeof(buff[0]), "T-Beam GPS");
+      snprintf(buff[1], sizeof(buff[1]), "No GPS detected");
+      Log::console(PSTR("%s"), buff[0]);
+      Log::console(PSTR("%s"), buff[1]);
+      return;
+  }
+  
+  // No valid GPS fix yet
+  if (!gps.location.isValid()) {
+      if (millis() - gpsMap > 10000) {
+          snprintf(buff[0], sizeof(buff[0]), "T-Beam GPS");
+          snprintf(buff[1], sizeof(buff[1]), "Positioning(%llu)", gpsSec++);
+          Log::console(PSTR("%s"), buff[0]);
+          Log::console(PSTR("%s"), buff[1]);
+          gpsMap = millis();
+      }
+  } else {
+      // We have a valid location fix
+      if (millis() - gpsMap > 10000) {
+        int localHour = gps.time.hour() + timeZoneOffset;
+        if (localHour >= 24) localHour -= 24;
+  
+        snprintf(buff[0], sizeof(buff[0]), "Local Time: %02d:%02d:%02d", localHour, gps.time.minute(), gps.time.second());
+        snprintf(buff[1], sizeof(buff[1]), "LNG:%.4f", gps.location.lng());
+        snprintf(buff[2], sizeof(buff[2]), "LAT:%.4f", gps.location.lat());
+        snprintf(buff[3], sizeof(buff[3]), "satellites:%u", gps.satellites.value());
+  
+        Log::console(PSTR("%s"), buff[0]);
+        Log::console(PSTR("%s"), buff[1]);
+        Log::console(PSTR("%s"), buff[2]);
+        Log::console(PSTR("%s"), buff[3]);
+  
+        gpsMap = millis();
+    }
+  }
   configManager.doLoop();
   if (configManager.isFailSafeActive())
   {
@@ -325,6 +380,7 @@ void handleSerial()
 // function to print controls
 void printControls()
 {
+  Log::console(PSTR("BETA - Custom v.01"));
   Log::console(PSTR("------------- Controls -------------"));
   Log::console(PSTR("!e - erase board config and reset"));
   Log::console(PSTR("!b - reboot the board"));
